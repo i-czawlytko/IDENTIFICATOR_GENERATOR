@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+option csharp_namespace = "Identificator_Serv.Protos";
+
+package ident;
+
+service Identer {
+
+  rpc sendGroup (GroupRequest) returns (CodeReply);
+
+  rpc GroupList (VoidRequest) returns (ListReply);
+
+  rpc CheckStatus (Identificator) returns (Status);
+}
+
+message GroupRequest {
+  int32 group_id = 1;
+}
+
+message VoidRequest { }
+
+message CodeReply {
+  string code = 1;
+}
+
+message ListReply {
+  string content = 1;
+}
+
+message Identificator {
+  string code = 1;
+}
+
+message Status {
+  int32 flag = 1;
+}
