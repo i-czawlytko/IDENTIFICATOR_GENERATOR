@@ -1,8 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+﻿
+using System.Timers;
 using Identificator_Serv.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -27,9 +24,13 @@ namespace Identificator_Serv
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddGrpc();
+
+            services.AddDbContext<IdentContext>();
+
+            services.AddTransient<EFIdentRepository>();
         }
 
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, ILogger<Startup> logger)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, ILogger<Startup> logger, EFIdentRepository repos)
         {
             if (env.IsDevelopment())
             {
@@ -48,11 +49,11 @@ namespace Identificator_Serv
                 });
             });
 
-            TimerCallback tm = new TimerCallback(Handler.ResetIdent);
-            tm += new TimerCallback(o => logger.LogInformation($"{DateTime.Now}: Внимание! Идентификаторы сброшены"));
+            Restarter.RestartIdents(app, logger);
 
-            Timer timer = new Timer(tm, null, 0, int.Parse(Configuration.GetSection("ResetInterval").Value));
-            
+            Timer timer = new Timer(int.Parse(Configuration.GetSection("ResetInterval").Value));
+            timer.Elapsed += (sender, e) => Restarter.RestartIdents(app,logger);
+            timer.Start();
         }
     }
 }

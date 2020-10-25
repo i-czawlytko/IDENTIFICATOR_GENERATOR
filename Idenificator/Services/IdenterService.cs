@@ -14,20 +14,18 @@ namespace Identificator_Serv.Services
     public class IdenterService : Identer.IdenterBase
     {
         private readonly ILogger<IdenterService> _logger;
-        public IdenterService(ILogger<IdenterService> logger)
+        private EFIdentRepository repository;
+        public IdenterService(ILogger<IdenterService> logger, EFIdentRepository repo)
         {
             _logger = logger;
+            repository = repo;
         }
 
         public override Task<CodeReply> sendGroup(GroupRequest request, ServerCallContext context)
         {
-            var db = new IdentContext();
-            db.Idents.Load();
-            db.Groups.Load();
-
             string result;
 
-            var group = db.Groups.FirstOrDefault(x => x.Id == request.GroupId);
+            var group = repository.GetGroup(request.GroupId);
 
             if (group is null)
             {
@@ -35,14 +33,8 @@ namespace Identificator_Serv.Services
             }
             else
             {
-                group.Next_Id = group.Next_Id + 1;
-
-                Ident new_code = new Ident { GroupId = request.GroupId, IdentId = group.Next_Id, Status = new Random().Next(0, 2) };
-                db.Idents.Add(new_code);
-                db.SaveChanges();
-                result = $"{group.Prefix}{new_code.IdentId}";
+                result = repository.AddIdentToGroup(group);
             }
-
 
             return Task.FromResult(new CodeReply
             {
@@ -52,17 +44,7 @@ namespace Identificator_Serv.Services
 
        public override Task<ListReply> GroupList(VoidRequest request, ServerCallContext context)
         {
-            var db = new IdentContext();
-
-            db.Groups.Load();
-
-            string result = String.Empty;
-
-            foreach(var e in db.Groups)
-            {
-                result += $"{e.Id}. {e.Title}\n";
-            }
-
+            string result = repository.GetGroupList();
 
             return Task.FromResult(new ListReply
             {
@@ -72,16 +54,9 @@ namespace Identificator_Serv.Services
 
         public override Task<Protos.Status> CheckStatus(Protos.Identificator request, ServerCallContext context)
         {
-            var db = new IdentContext();
+            var ident= repository.GetIdent(request.Code);
 
-            db.Idents.Load();
-
-            string pattern = @"(\d+)";
-            string[] query_parts = Regex.Split(request.Code, pattern);
-
-            var elem = db.Idents.Include(e => e.Group).FirstOrDefault(x=> x.Group.Prefix== query_parts[0] && x.IdentId==int.Parse(query_parts[1]));
-
-            if(elem is null)
+            if(ident is null)
             {
                 return Task.FromResult(new Protos.Status
                 {
@@ -92,7 +67,7 @@ namespace Identificator_Serv.Services
             {
                 return Task.FromResult(new Protos.Status
                 {
-                    Flag = elem.Status
+                    Flag = ident.Status
                 });
             }
 

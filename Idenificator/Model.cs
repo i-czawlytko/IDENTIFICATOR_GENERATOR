@@ -1,7 +1,15 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Identificator_Serv
 {
@@ -40,20 +48,73 @@ namespace Identificator_Serv
 
     }
 
-    public static class Handler
+    public class EFIdentRepository //: IBidRepository
     {
-        public static void ResetIdent(object obj)
-        {
-            var db = new IdentContext();
-            db.Database.ExecuteSqlRaw("DELETE FROM [Idents]");
-            db.Groups.Load();
+        private IdentContext context;
 
-            foreach(var e in db.Groups)
+        public EFIdentRepository(IdentContext ctx)
+        {
+            context = ctx;
+        }
+
+        public IEnumerable<Ident> Idents => context.Idents.Include(p => p.Group).ToArray();
+        public IEnumerable<Group> Groups => context.Groups.ToArray();
+
+        public Group GetGroup(int group_id)
+        {
+            return this.Groups.FirstOrDefault(x => x.Id == group_id);
+        }
+
+        public string AddIdentToGroup(Group group)
+        {
+            group.Next_Id++;
+
+            Ident new_ident = new Ident { GroupId = group.Id, IdentId = group.Next_Id, Status = new System.Random().Next(0, 2) };
+            context.Idents.Add(new_ident);
+            context.SaveChanges();
+            return $"{new_ident.Group.Prefix}{new_ident.IdentId}";//check
+        }
+
+        public string GetGroupList()
+        {
+            string result = String.Empty;
+
+            foreach (var e in this.Groups)
             {
-                e.Next_Id = 0;
+                result += $"{e.Id}. {e.Title}\n";
             }
 
-            db.SaveChanges();
+            return result;
+        }
+
+        public Ident GetIdent(string code)
+        {
+            string pattern = @"(\d+)";
+            string[] query_parts = Regex.Split(code, pattern);
+
+            return this.Idents.FirstOrDefault(x => x.Group.Prefix == query_parts[0] && x.IdentId == int.Parse(query_parts[1]));
+        }
+    }
+
+    public static class Restarter
+    {
+        public static void RestartIdents(IApplicationBuilder app, ILogger<Startup> logger)
+        {
+            using (var serviceScope = app.ApplicationServices.CreateScope())
+            {
+                var context = serviceScope.ServiceProvider.GetService<IdentContext>();
+
+                context.Database.ExecuteSqlRaw("DELETE FROM [Idents]");
+
+                foreach (var e in context.Groups)
+                {
+                    e.Next_Id = 0;
+                }
+
+                context.SaveChanges();
+                logger.LogInformation($"{DateTime.Now}: Внимание! Идентификаторы сброшены");
+            }
+
         }
     }
 }
